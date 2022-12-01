@@ -19,18 +19,16 @@ let folder (n: int option) state =
 
 let collect seq = Seq.foldBack folder seq []
 
-File.ReadLines("./day1/input.txt")
-|> Seq.map tryParse
-|> collect
-|> Seq.map (fun l -> List.sum l)
-|> Seq.max
-|> printfn "Largest batch: %d"
+let batches =
+    File.ReadLines("./day1/input.txt")
+    |> Seq.map tryParse
+    |> collect
+    |> Seq.map (fun l -> List.sum l)
+    |> Seq.sortDescending
 
-File.ReadLines("./day1/input.txt")
-|> Seq.map tryParse
-|> collect
-|> Seq.map (fun l -> List.sum l)
-|> Seq.sortDescending
-|> Seq.take 3
-|> Seq.sum
+let top n batches = batches |> Seq.take n |> Seq.sum
+
+top 1 batches |> printfn "Largest batch: %d"
+
+top 3 batches
 |> printfn "Total calories carried by top 3 elves: %d"
