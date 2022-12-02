@@ -1,0 +1,32 @@
+{
+  "configurations": [
+    {
+      "name": "Advent of Code Day 1",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "c:\\Work\\advent-of-code-2022\\day1\\bin\\Debug\\net7.0\\day1.dll",
+      "cwd": "${workspaceFolder}",
+      "console": "internalConsole",
+      "stopAtEntry": false,
+      "preLaunchTask": "Build: day1.fsproj",
+      "presentation": {
+        "group": "ionide",
+        "hidden": false
+      }
+    },
+    {
+        "name": "Advent of Code Day 2",
+        "type": "coreclr",
+        "request": "launch",
+        "program": "c:\\Work\\advent-of-code-2022\\day2\\bin\\Debug\\net7.0\\day2.dll",
+        "cwd": "${workspaceFolder}",
+        "console": "internalConsole",
+        "stopAtEntry": false,
+        "preLaunchTask": "Build: day2.fsproj",
+        "presentation": {
+          "group": "ionide",
+          "hidden": false
+        }
+      }  
+  ]
+}
