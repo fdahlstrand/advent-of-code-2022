@@ -13,8 +13,6 @@ type Outcome =
 type Move = Shape
 type Response = Shape
 type Round = Move * Response
-type Game = Shape * Outcome
-type Strategem = Move * Outcome
 
 let outcome (round: Round) =
     match round with
@@ -36,7 +34,38 @@ let gameScore outcome =
     | Draw -> 3
     | Lose -> 0
 
-let determineRound ((move, outcome): Strategem) : Round =
+let score (round: Round) =
+    let (_, shape) = round
+    (outcome >> gameScore) round + shapeScore shape
+
+let firstPolicy (instruction: string) : Round =
+    let charToShape ch =
+        match ch with
+        | 'A'
+        | 'X' -> Rock
+        | 'B'
+        | 'Y' -> Paper
+        | 'C'
+        | 'Z' -> Scissor
+        | _ -> failwith (sprintf "Unsupported shape '%c'" ch)
+
+    (charToShape instruction[0], charToShape instruction[2])
+
+let secondPolicy (instruction: string) : Round =
+    let move =
+        match instruction[0] with
+        | 'A' -> Rock
+        | 'B' -> Paper
+        | 'C' -> Scissor
+        | _ -> failwith (sprintf "Unsupported shape '%c'" instruction[0])
+
+    let outcome =
+        match instruction[2] with
+        | 'X' -> Lose
+        | 'Y' -> Draw
+        | 'Z' -> Win
+        | _ -> failwith (sprintf "Unsupported outcome '%c'" instruction[2])
+
     let response =
         match outcome with
         | Draw -> move
@@ -53,49 +82,17 @@ let determineRound ((move, outcome): Strategem) : Round =
 
     (move, response)
 
-let score (shape, outcome) =
-    (gameScore outcome) + (shapeScore shape)
+let instantiatePlaybook (policy: string -> Round) (instructions: string seq) = instructions |> Seq.map policy
 
-let play (round: Round) : Game =
-    let (_, shape) = round
-
-    (shape, outcome round)
-
-let charToShape ch =
-    match ch with
-    | 'A'
-    | 'X' -> Rock
-    | 'B'
-    | 'Y' -> Paper
-    | 'C'
-    | 'Z' -> Scissor
-    | _ -> failwith (sprintf "Unsupported move '%c'" ch)
-
-let charToExpectedOutcome ch =
-    match ch with
-    | 'X' -> Lose
-    | 'Y' -> Draw
-    | 'Z' -> Win
-    | _ -> failwith (sprintf "Unsupported outcome '%c'" ch)
-
-
-let stringToRound (s: string) : Round = (charToShape s[0], charToShape s[2])
-
-let stringToStrategem (s: string) : Strategem =
-    (charToShape s[0], charToExpectedOutcome s[2])
+let calculateScore (playbook: Round seq) : int = playbook |> Seq.map score |> Seq.sum
 
 
 File.ReadLines("./day2/input.txt")
-|> Seq.map stringToRound
-|> Seq.map play
-|> Seq.map score
-|> Seq.sum
+|> instantiatePlaybook firstPolicy
+|> calculateScore
 |> printfn "Total score, misunderstood strategy: %d"
 
 File.ReadLines("./day2/input.txt")
-|> Seq.map stringToStrategem
-|> Seq.map determineRound
-|> Seq.map play
-|> Seq.map score
-|> Seq.sum
+|> instantiatePlaybook secondPolicy
+|> calculateScore
 |> printfn "Total score, correct strategy: %d"
