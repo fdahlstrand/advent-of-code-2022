@@ -1,12 +1,13 @@
 ﻿open System.IO
 
+let stringToSet (str: string) =
+    (Set.empty<char>, str) ||> Seq.fold (fun s -> s.Add)
+
 module Bag =
-    let parse (bagString: string) =
-        let stringToSet (str: string) =
-            (Set.empty<char>, str) ||> Seq.fold (fun s -> s.Add)
+    let parse (str: string) =
             
-        let midpoint = bagString.Length/2
-        (stringToSet bagString[..midpoint-1], stringToSet bagString[midpoint..])
+        let midpoint = str.Length/2
+        (stringToSet str[..midpoint-1], stringToSet str[midpoint..])
 
 let calculatePriority (ch:char) =
     match ch with
@@ -23,4 +24,15 @@ File.ReadLines("./day3/input.txt")
                |> Set.toList
                |> List.sum)
 |> Seq.sum
-|> printfn "%A"
+|> printfn "Total priority of bag items %d"
+
+File.ReadLines("./day3/input.txt")
+|> Seq.map stringToSet
+|> Seq.chunkBySize 3
+|> Seq.map (fun group -> group
+                         |> Set.intersectMany
+                         |> Set.map calculatePriority
+                         |> Set.toList
+                         |> List.sum )
+|> Seq.sum
+|> printfn "Total priority of badge item types %d"
