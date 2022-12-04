@@ -10,10 +10,27 @@ module Range =
         
         a2 >= a1 && b2 <= b1
         
+    let intersect (range1: Range) (range2: Range): Range =
+        let (a1, b1) = range1
+        let (a2, b2) = range2
+
+        (max a1 a2, min b1 b2)
+        
+    let isEmpty (range: Range) =
+        let (a, b) = range
+        
+        (b - a + 1) <= 0        
+        
 module Assignment =
-    let isOverlapping (assignment: Assignment) =
+    let isFullyOverlapping (assignment: Assignment) =
         let (range1, range2) = assignment
+        
         (Range.isSubset range1 range2) || (Range.isSubset range2 range1)
+        
+    let isPartlyOverlapping (assignment: Assignment) =
+        let (range1, range2) = assignment
+        
+        not (Range.isEmpty (Range.intersect range1 range2))
  
 module AssignmentList =
     open System
@@ -38,10 +55,18 @@ module AssignmentList =
         assignments
         |> Seq.map (fun str -> match str with | Assignment a -> a | _ -> failwith $"Not a valid assignment '%s{str}'")
         |> Seq.toList
+        
+        
+    let private count pred = List.map pred >> List.filter id >> List.length     
 
     let fromFile = File.ReadLines >> ofSeq    
-    let countOverlapping = List.map Assignment.isOverlapping >> List.filter id >> List.length         
+    let countFullyOverlapping = count Assignment.isFullyOverlapping
+    let countPartlyOverlapping = count Assignment.isPartlyOverlapping
 
 AssignmentList.fromFile "./day4/input.txt"
-|> AssignmentList.countOverlapping
+|> AssignmentList.countFullyOverlapping
+|> printfn "%d total overlapping regions"
+
+AssignmentList.fromFile "./day4/input.txt"
+|> AssignmentList.countPartlyOverlapping
 |> printfn "%d total overlapping regions"
