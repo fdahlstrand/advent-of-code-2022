@@ -3,6 +3,14 @@ type Range = SectionID * SectionID
 type Assignment = Range * Range
 type AssignmentList = Assignment list
 
+module SectionID =
+    open System
+    
+    let tryParse (str: string): SectionID option =
+        match Int32.TryParse(str) with
+        | true, value -> Some value
+        | _ -> None
+
 module Range =
     let isSubset (range1: Range) (range2: Range) =
         let (a1, b1) = range1
@@ -33,13 +41,12 @@ module Assignment =
         not (Range.isEmpty (Range.intersect range1 range2))
  
 module AssignmentList =
-    open System
     open System.IO
     open System.Text.RegularExpressions
     
     let private sectionID (collection: GroupCollection) (index: string): SectionID =
-        match Int32.TryParse(collection.[index].Value) with
-        | (true, a) -> a
+        match SectionID.tryParse collection.[index].Value with
+        | Some id -> id
         | _ -> failwith $"Not a valid number (%s{collection.[index].Value})" 
     
     let private (|Assignment|_|) input: Assignment option =
@@ -54,11 +61,9 @@ module AssignmentList =
     let ofSeq (assignments: string seq): AssignmentList =
         assignments
         |> Seq.map (fun str -> match str with | Assignment a -> a | _ -> failwith $"Not a valid assignment '%s{str}'")
-        |> Seq.toList
+        |> Seq.toList        
         
-        
-    let private count pred = List.map pred >> List.filter id >> List.length     
-
+    let private count pred = List.map pred >> List.filter id >> List.length
     let fromFile = File.ReadLines >> ofSeq    
     let countFullyOverlapping = count Assignment.isFullyOverlapping
     let countPartlyOverlapping = count Assignment.isPartlyOverlapping
