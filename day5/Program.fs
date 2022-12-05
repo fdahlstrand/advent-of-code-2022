@@ -28,10 +28,10 @@ module Ship =
     let private (|CrateRow|_|) input : CrateRow option =
         let m = Regex.Match(input, crateRowPattern)
 
-        if (m.Success) then
+        if m.Success then
             let crates =
-                [| for i in 0 .. m.Groups.["slot"].Captures.Count - 1 ->
-                       Crate.tryParse m.Groups.["slot"].Captures.[i].Value |]
+                [| for i in 0 .. m.Groups["slot"].Captures.Count - 1 ->
+                       Crate.tryParse m.Groups["slot"].Captures[i].Value |]
                 |> Array.indexed
                 |> Array.map (fun (ix, c) -> (ix + 1, c))
 
@@ -97,11 +97,11 @@ module Procedure =
     let private (|Instruction|_|) input =
         let m = Regex.Match(input, movePattern)
 
-        if (m.Success) then
+        if m.Success then
             Some
-                { Quantity = Int32.Parse(m.Groups.["count"].Value)
-                  Source = Int32.Parse(m.Groups.["source"].Value)
-                  Target = Int32.Parse(m.Groups.["target"].Value) }
+                { Quantity = Int32.Parse(m.Groups["count"].Value)
+                  Source = Int32.Parse(m.Groups["source"].Value)
+                  Target = Int32.Parse(m.Groups["target"].Value) }
         else
             None
 
@@ -135,7 +135,7 @@ sampleData
 |> Map.toList
 |> List.map (fun (_, crates) ->
     match crates with
-    | c :: cs -> c
+    | c :: _ -> c
     | [] -> ' ')
 |> System.String.Concat
 |> printfn "%s"
@@ -150,7 +150,7 @@ Procedure.fromFile "./day5/input.txt"
 |> Map.toList
 |> List.map (fun (_, crates) ->
     match crates with
-    | c :: cs -> c
+    | c :: _ -> c
     | [] -> ' ')
 |> System.String.Concat
 |> printfn "%s"
@@ -160,7 +160,7 @@ Procedure.fromFile "./day5/input.txt"
 |> Map.toList
 |> List.map (fun (_, crates) ->
     match crates with
-    | c :: cs -> c
+    | c :: _ -> c
     | [] -> ' ')
 |> System.String.Concat
 |> printfn "%s"
