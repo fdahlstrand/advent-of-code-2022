@@ -58,29 +58,6 @@ module Ship =
         Seq.map parseRow >> Seq.choose id >> Seq.fold foldRows empty
 
     let fromFile = File.ReadAllLines >> ofSeq
-
-    let rec move ship instruction =
-        if (instruction.Quantity = 0) then
-            ship
-        else
-            let newShip =
-                match Map.find instruction.Source ship with
-                | x :: xs ->
-                    ship
-                    |> Map.add instruction.Source xs
-                    |> Map.add instruction.Target (x :: (Map.find instruction.Target ship))
-                | [] -> failwith "Try to collect from empty stack"
-
-            move newShip { instruction with Quantity = instruction.Quantity - 1 }
-
-    let batchMove ship instruction =
-        let sourceStack = Map.find instruction.Source ship
-        let batch = List.take instruction.Quantity sourceStack
-        let reminder = List.skip instruction.Quantity sourceStack
-
-        ship
-        |> Map.add instruction.Source reminder
-        |> Map.add instruction.Target (batch @ (Map.find instruction.Target ship))
         
     let topCrateString:Ship -> string = Map.toList >> List.map (fun (_, crates) -> match crates with | c :: _ -> c | [] -> ' ') >> System.String.Concat
     
@@ -148,4 +125,4 @@ Procedure.fromFile "./day5/input.txt"
 Procedure.fromFile "./day5/input.txt"
 |> Ship.rearrange ship Crane.crateMover9001 
 |> Ship.topCrateString
-|> printfn "Rearranged with CrateMover9001: %s"
+|> printfn "Rearranged with CrateMover 9001: %s"
