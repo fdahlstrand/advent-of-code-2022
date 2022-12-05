@@ -4,11 +4,11 @@
       "name": "Advent of Code",
       "type": "coreclr",
       "request": "launch",
-      "program": "c:\\Work\\advent-of-code-2022\\day4\\bin\\Debug\\net7.0\\day4.dll",
+      "program": "c:\\Work\\advent-of-code-2022\\day5\\bin\\Debug\\net7.0\\day5.dll",
       "cwd": "${workspaceFolder}",
       "console": "internalConsole",
       "stopAtEntry": false,
-      "preLaunchTask": "Build: day4.fsproj",
+      "preLaunchTask": "Build: day5.fsproj",
       "presentation": {
         "group": "ionide",
         "hidden": false
