@@ -11,10 +11,9 @@ type Procedure = Instruction list
 
 module Crate =
     let tryParse (str: string) : Crate option =
-        if (str[1] = ' ') then
-            None
-        else
-            Some str[1]
+        match str[1] with
+        | ' ' -> None
+        | c -> Some c
 
 module Ship =
     open System.IO
@@ -29,9 +28,10 @@ module Ship =
         let m = Regex.Match(input, crateRowPattern)
 
         if m.Success then
+            let captures = m.Groups["slot"].Captures
             let crates =
-                [| for i in 0 .. m.Groups["slot"].Captures.Count - 1 ->
-                       Crate.tryParse m.Groups["slot"].Captures[i].Value |]
+                [| for i in 0 .. captures.Count - 1 ->
+                       Crate.tryParse captures[i].Value |]
                 |> Array.indexed
                 |> Array.map (fun (ix, c) -> (ix + 1, c))
 
@@ -46,19 +46,16 @@ module Ship =
 
     let private empty: Ship = Map.empty<int, Stack>
 
-    let foldRow (acc: Ship) (ix: int, c: Crate option) : Ship =
+    let private foldRow (acc: Ship) (ix: int, c: Crate option) : Ship =
         match c with
         | Some x when Map.containsKey ix acc -> Map.add ix ((Map.find ix acc) @ [ x ]) acc
         | Some x -> Map.add ix [ x ] acc
         | None -> acc
 
-
     let private foldRows (acc: Ship) = Array.fold foldRow acc
 
     let ofSeq: string seq -> Ship =
-        Seq.map parseRow
-        >> Seq.choose id
-        >> Seq.fold foldRows empty
+        Seq.map parseRow >> Seq.choose id >> Seq.fold foldRows empty
 
     let fromFile = File.ReadAllLines >> ofSeq
 
@@ -75,16 +72,20 @@ module Ship =
                 | [] -> failwith "Try to collect from empty stack"
 
             move newShip { instruction with Quantity = instruction.Quantity - 1 }
-            
+
     let batchMove ship instruction =
         let sourceStack = Map.find instruction.Source ship
         let batch = List.take instruction.Quantity sourceStack
         let reminder = List.skip instruction.Quantity sourceStack
-         
+
         ship
         |> Map.add instruction.Source reminder
-        |> Map.add instruction.Target (batch@(Map.find instruction.Target ship))
+        |> Map.add instruction.Target (batch @ (Map.find instruction.Target ship))
         
+    let topCrateString:Ship -> string = Map.toList >> List.map (fun (_, crates) -> match crates with | c :: _ -> c | [] -> ' ') >> System.String.Concat
+    
+    let rearrange ship crane = List.fold crane ship
+
 module Procedure =
     open System
     open System.IO
@@ -112,55 +113,39 @@ module Procedure =
 
     let ofSeq: string seq -> Procedure = Seq.map parseRow >> Seq.choose id >> Seq.toList
     let fromFile = File.ReadAllLines >> ofSeq
+    
+module Crane =
+    let rec crateMover9000 ship instruction =
+        if (instruction.Quantity = 0) then
+            ship
+        else
+            let newShip =
+                match Map.find instruction.Source ship with
+                | x :: xs ->
+                    ship
+                    |> Map.add instruction.Source xs
+                    |> Map.add instruction.Target (x :: (Map.find instruction.Target ship))
+                | [] -> failwith "Try to collect from empty stack"
 
-let sampleData =
-    seq {
-        "    [D]    "
-        "[N] [C]    "
-        "[Z] [M] [P]"
-        " 1   2   3 "
-        ""
-        "move 1 from 2 to 1"
-        "move 3 from 1 to 3"
-        "move 2 from 2 to 1"
-        "move 1 from 1 to 2"
-    }
+            crateMover9000 newShip { instruction with Quantity = instruction.Quantity - 1 }
 
-let sampleShip = sampleData |> Ship.ofSeq
+    let crateMover9001 ship instruction =
+        let sourceStack = Map.find instruction.Source ship
+        let batch = List.take instruction.Quantity sourceStack
+        let reminder = List.skip instruction.Quantity sourceStack
 
-
-sampleData
-|> Procedure.ofSeq
-|> List.fold Ship.batchMove sampleShip
-|> Map.toList
-|> List.map (fun (_, crates) ->
-    match crates with
-    | c :: _ -> c
-    | [] -> ' ')
-|> System.String.Concat
-|> printfn "%s"
-
-
-
+        ship
+        |> Map.add instruction.Source reminder
+        |> Map.add instruction.Target (batch @ (Map.find instruction.Target ship))
 
 let ship = Ship.fromFile "./day5/input.txt"
 
 Procedure.fromFile "./day5/input.txt"
-|> List.fold Ship.move ship
-|> Map.toList
-|> List.map (fun (_, crates) ->
-    match crates with
-    | c :: _ -> c
-    | [] -> ' ')
-|> System.String.Concat
-|> printfn "%s"
+|> Ship.rearrange ship Crane.crateMover9000 
+|> Ship.topCrateString
+|> printfn "Rearranged with CrateMover 9000: %s"
 
 Procedure.fromFile "./day5/input.txt"
-|> List.fold Ship.batchMove ship
-|> Map.toList
-|> List.map (fun (_, crates) ->
-    match crates with
-    | c :: _ -> c
-    | [] -> ' ')
-|> System.String.Concat
-|> printfn "%s"
+|> Ship.rearrange ship Crane.crateMover9001 
+|> Ship.topCrateString
+|> printfn "Rearranged with CrateMover9001: %s"
