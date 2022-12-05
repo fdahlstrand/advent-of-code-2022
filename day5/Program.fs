@@ -75,7 +75,16 @@ module Ship =
                 | [] -> failwith "Try to collect from empty stack"
 
             move newShip { instruction with Quantity = instruction.Quantity - 1 }
-
+            
+    let batchMove ship instruction =
+        let sourceStack = Map.find instruction.Source ship
+        let batch = List.take instruction.Quantity sourceStack
+        let reminder = List.skip instruction.Quantity sourceStack
+         
+        ship
+        |> Map.add instruction.Source reminder
+        |> Map.add instruction.Target (batch@(Map.find instruction.Target ship))
+        
 module Procedure =
     open System
     open System.IO
@@ -122,7 +131,7 @@ let sampleShip = sampleData |> Ship.ofSeq
 
 sampleData
 |> Procedure.ofSeq
-|> List.fold Ship.move sampleShip
+|> List.fold Ship.batchMove sampleShip
 |> Map.toList
 |> List.map (fun (_, crates) ->
     match crates with
@@ -138,6 +147,16 @@ let ship = Ship.fromFile "./day5/input.txt"
 
 Procedure.fromFile "./day5/input.txt"
 |> List.fold Ship.move ship
+|> Map.toList
+|> List.map (fun (_, crates) ->
+    match crates with
+    | c :: cs -> c
+    | [] -> ' ')
+|> System.String.Concat
+|> printfn "%s"
+
+Procedure.fromFile "./day5/input.txt"
+|> List.fold Ship.batchMove ship
 |> Map.toList
 |> List.map (fun (_, crates) ->
     match crates with
