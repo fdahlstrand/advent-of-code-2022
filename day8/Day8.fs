@@ -1,34 +1,6 @@
 ﻿open System
 
-let scan state height =
-    if (height > fst state) then
-        (height, [| yield! snd state; true |])
-    else
-        (fst state, [| yield! snd state; false |])
-
-let scanBack height state =
-    if (height > fst state) then
-        (height, [| true; yield! snd state |])
-    else
-        (fst state, [| false; yield! snd state |])
-
-
-let rowFromString =
-    Seq.map string
-    >> Seq.map Int32.Parse
-    >> Seq.toArray
-
-
-let scanLeft arr = Array.fold scan (-1, [||]) arr |> snd
-
-let scanRight arr =
-    Array.foldBack scanBack arr (-1, [||]) |> snd
-
-let fromArrayOfRowArrays arr =
-    let rows = Array.length arr
-    let cols = Array.length arr[0]
-
-    Array2D.init rows cols (fun i j -> arr.[i].[j])
+let rowFromString = Seq.map string >> Seq.map Int32.Parse >> Seq.toArray
 
 let fromArrayOfColArrays arr =
     let cols = Array.length arr
@@ -36,87 +8,65 @@ let fromArrayOfColArrays arr =
 
     Array2D.init rows cols (fun i j -> arr.[j].[i])
 
-
 module HeightMap =
     open System.IO
 
     let fromLines: string seq -> int [,] =
-        Seq.map rowFromString
-        >> Seq.toArray
-        >> fromArrayOfRowArrays
+        Seq.map rowFromString >> Seq.toArray >> array2D
 
     let fromFile = File.ReadAllLines >> fromLines
 
-    let rows heightMap =
-        [| for i in 0 .. Array2D.length1 heightMap - 1 -> heightMap[i, *] |]
+type HeightMap = int [,]
 
-    let cols heightMap =
-        [| for i in 0 .. Array2D.length2 heightMap - 1 -> heightMap[*, i] |]
-
-
-let rayCast row col map =
-    let rows = Array2D.length1 map
-    let cols = Array2D.length2 map
-    let height = map[row, col]
-
-    let mutable cost = 0
-    let mutable i = row - 1
-
-    while i >= 0 do
-        if (map[i, col] < height) then
-            cost <- cost + 1
-            i <- i + 1
-        else
-            i <- -1
-
-
-
+// let heightMap =
+//     seq {
+//         "30373"
+//         "25512"
+//         "65332"
+//         "33549"
+//         "35390"
+//     }
+//     |> HeightMap.fromLines
 
 let heightMap = HeightMap.fromFile "./day8/input.txt"
-// seq {
-//     "30373"
-//     "25512"
-//     "65332"
-//     "33549"
-//     "35390"
-// }
-// |> HeightMap.fromLines
 
 
-let leftScan =
-    heightMap
-    |> HeightMap.rows
-    |> Array.map scanLeft
-    |> fromArrayOfRowArrays
+let treeVisible H h =
+    if (H >= h) then (false, H) else (true, h)
 
-let rightScan =
-    heightMap
-    |> HeightMap.rows
-    |> Array.map scanRight
-    |> fromArrayOfRowArrays
-
-let topScan =
-    heightMap
-    |> HeightMap.cols
-    |> Array.map scanLeft
-    |> fromArrayOfColArrays
-
-let bottomScan =
-    heightMap
-    |> HeightMap.cols
-    |> Array.map scanRight
-    |> fromArrayOfColArrays
-
-
+let treeVisibleRev h H =
+    if (H >= h) then (false, H) else (true, h)
 
 let combine (m1: bool [,]) (m2: bool [,]) =
     Array2D.init (Array2D.length1 m1) (Array2D.length2 m1) (fun i j -> m1[i, j] || m2[i, j])
 
 
-leftScan
-|> combine rightScan
-|> combine topScan
-|> combine bottomScan
-|> HeightMap.rows
-|> Array.sumBy (Array.sumBy (fun x -> if x then 1 else 0))
-|> printfn "%A"
+let rows = [| 0 .. Array2D.length1 heightMap - 1 |]
+let cols = [| 0 .. Array2D.length2 heightMap - 1 |]
+
+let west =
+    rows
+    |> Array.map (fun row -> (-1, heightMap[row, *]) ||> Array.mapFold treeVisible |> fst)
+    |> array2D
+
+let east =
+    rows
+    |> Array.map (fun row -> (heightMap[row, *], -1) ||> Array.mapFoldBack treeVisibleRev |> fst)
+    |> array2D
+
+let north =
+    cols
+    |> Array.map (fun col -> (-1, heightMap[*, col]) ||> Array.mapFold treeVisible |> fst)
+    |> fromArrayOfColArrays
+
+let south =
+    cols
+    |> Array.map (fun col -> (heightMap[*, col], -1) ||> Array.mapFoldBack treeVisibleRev |> fst)
+    |> fromArrayOfColArrays
+
+let visibleTrees = west |> combine east |> combine north |> combine south
+
+rows
+|> Array.map (fun r -> visibleTrees[r, *] |> Array.sumBy (fun visible -> if visible then 1 else 0))
+|> Array.sum
+|> printfn "Number of visible trees: %A"
