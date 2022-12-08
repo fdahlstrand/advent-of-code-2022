@@ -18,16 +18,6 @@ module HeightMap =
 
 type HeightMap = int [,]
 
-// let heightMap =
-//     seq {
-//         "30373"
-//         "25512"
-//         "65332"
-//         "33549"
-//         "35390"
-//     }
-//     |> HeightMap.fromLines
-
 let heightMap = HeightMap.fromFile "./day8/input.txt"
 
 
@@ -70,3 +60,37 @@ rows
 |> Array.map (fun r -> visibleTrees[r, *] |> Array.sumBy (fun visible -> if visible then 1 else 0))
 |> Array.sum
 |> printfn "Number of visible trees: %A"
+
+let takeUnblocked H (rRange,cRange) map =
+    seq {
+        let mutable blocked = false
+        for r in rRange do
+            for c in cRange do
+            if not blocked then
+                if heightMap[r, c] < H then
+                    yield 1
+                else
+                    blocked <- true
+                    yield 1
+    }
+
+
+let eastFrom (map: HeightMap) r c = (map[r,c], ([r..r],[c + 1 .. Array2D.length2 map - 1]), map)
+let westFrom (map: HeightMap) r c = (map[r,c], ([r..r],[c - 1 .. -1 .. 0]), map)
+let northFrom (map: HeightMap) r c = (map[r,c], ([r - 1 .. -1 ..0],[c .. c]), map)
+let southFrom (map: HeightMap) r c = (map[r,c], ([r + 1 .. Array2D.length1 map - 1],[c .. c]), map)
+
+let countEast = eastFrom heightMap
+let countWest = westFrom heightMap
+let countNorth = northFrom heightMap
+let countSouth = southFrom heightMap
+let score r c =
+    let scores = [
+        countEast r c |||> takeUnblocked |> Seq.length
+        countWest r c |||> takeUnblocked |> Seq.length
+        countSouth r c |||> takeUnblocked |> Seq.length
+        countNorth r c |||> takeUnblocked |> Seq.length ]
+    List.fold (fun acc s -> acc * s) 1 scores
+                      
+let scores = heightMap |> Array2D.mapi (fun i j _ -> score i j)
+rows |> Array.map (fun r -> scores[r,*] |> Array.max ) |> Array.max |> printfn "Largest scenic score is %A"
