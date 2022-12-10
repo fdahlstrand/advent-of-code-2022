@@ -68,4 +68,20 @@ let indices = [for i in 20 .. 40 .. 220 -> i]
 let d = input |> CPU.run
 [|for i in 20 .. 40 .. 220 -> i*d[i]|] |> Array.sum |> printfn "%A"
 
+let coord cycle =
+    ((cycle-1)/40,(cycle-1)%40)
+    
+let cycle r c = (r*40 + c) + 1
+
+let getPixel (cycles: int[]) r c =
+    let x = cycles[cycle r c]
+    
+    if (x - 1 <= c && c <= x + 1) then
+        '#'
+    else
+        '.'
+
+[| for r in 0..5 do
+       ((Array2D.init 6 40 (getPixel d))[r, *]) |> Array.map (sprintf "%c") |> String.concat "" |] |> Array.iter (printfn "%s")
+
 
