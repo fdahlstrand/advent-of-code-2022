@@ -1,37 +1,40 @@
-﻿type Throw = { Target: int; Item: int }
+﻿open System
+type Throw = { Target: int; Item: Int64 }
 
 type Monkey =
-    { Items: int list
-      Operation: int -> int
-      Test: int -> Throw
-      InspectionCounter: int }
+    { Items: Int64 list
+      Operation: Int64 -> Int64
+      Test: Int64 -> Throw
+      InspectionCounter: Int64 }
 
 module Monkey =
-    let inspect (monkey: Monkey) (item: int) =
-        let newItem = (monkey.Operation item) / 3
+    let inspect (worryHandler:Int64 -> Int64) (monkey: Monkey) (item: Int64) =
+        let newItem = worryHandler(monkey.Operation item)
+        
+        if (newItem < 0) then failwith "Integer type too small"
 
         (monkey.Test newItem,
          { monkey with
              Items = monkey.Items.Tail
-             InspectionCounter = monkey.InspectionCounter + 1 })
+             InspectionCounter = monkey.InspectionCounter + 1L })
 
     let catch (monkey: Monkey) (throw: Throw) =
         { monkey with Items = monkey.Items @ [ throw.Item ] }
 
     let defineTest divisor ifTarget elseTarget =
         fun i ->
-            if (i % divisor = 0) then
+            if (i % divisor = 0L) then
                 { Target = ifTarget; Item = i }
             else
                 { Target = elseTarget; Item = i }
 
 let troop1 =
     [| { Items = [ 79; 98 ]
-         Operation = fun i -> i * 19
+         Operation = fun i -> i * 19L
          Test = Monkey.defineTest 23 2 3
          InspectionCounter = 0 }
        { Items = [ 54; 65; 75; 74 ]
-         Operation = fun i -> i + 6
+         Operation = fun i -> i + 6L
          Test = Monkey.defineTest 19 2 0
          InspectionCounter = 0 }
        { Items = [ 79; 60; 97 ]
@@ -39,34 +42,34 @@ let troop1 =
          Test = Monkey.defineTest 13 1 3
          InspectionCounter = 0 }
        { Items = [ 74 ]
-         Operation = fun i -> i + 3
+         Operation = fun i -> i + 3L
          Test = Monkey.defineTest 17 0 1
          InspectionCounter = 0 } |]
     
 let troop2 =
     [|
        { Items = [80]
-         Operation = fun i -> i*5
+         Operation = fun i -> i*5L
          Test = Monkey.defineTest 2 4 3
          InspectionCounter = 0 }
        { Items = [75; 83; 74]
-         Operation = fun i -> i + 7
+         Operation = fun i -> i + 7L
          Test = Monkey.defineTest 7 5 6
          InspectionCounter = 0 }
        { Items = [86; 67; 61; 96; 52; 63; 73]
-         Operation = fun i -> i + 5
+         Operation = fun i -> i + 5L
          Test = Monkey.defineTest 3 7 0
          InspectionCounter = 0 }
        { Items = [85; 83; 55; 85; 57; 70; 85; 52]
-         Operation = fun i -> i + 8 
+         Operation = fun i -> i + 8L
          Test = Monkey.defineTest 17 1 5
          InspectionCounter = 0 }
        { Items = [67; 75; 91; 72; 89]
-         Operation = fun i -> i + 4
+         Operation = fun i -> i + 4L
          Test = Monkey.defineTest 11 3 1
          InspectionCounter = 0 }
        { Items = [66; 64; 68; 92; 68; 77]
-         Operation = fun i -> i * 2
+         Operation = fun i -> i * 2L
          Test = Monkey.defineTest 19 6 2
          InspectionCounter = 0 }
        { Items = [97; 94; 79; 88]
@@ -74,21 +77,25 @@ let troop2 =
          Test = Monkey.defineTest 5 2 7
          InspectionCounter = 0 }
        { Items = [77; 85]
-         Operation = fun i -> i + 6
+         Operation = fun i -> i + 6L
          Test = Monkey.defineTest 13 4 0
          InspectionCounter = 0 }        
     |]
 
+let worryHandler1 (i:Int64) = i / 3L
+let worryHandler2 (i:Int64) = i % (23L*19L*13L*17L)
+let worryHandler3 (i:Int64) = i % (2L*7L*3L*17L*11L*19L*5L*13L)
+
 let doRound (troop: Monkey[]) =
     for m in 0 .. Array.length troop - 1 do
-        let throws, monkey = (troop[m], troop[m].Items) ||> List.mapFold Monkey.inspect
+        let throws, monkey = (troop[m], troop[m].Items) ||> List.mapFold (Monkey.inspect worryHandler3)
         Array.set troop m monkey
 
         throws
         |> List.iter (fun throw -> Array.set troop throw.Target (Monkey.catch troop[throw.Target] throw))
 
-for _ in 1..20 do
-    doRound (troop2)
+for _ in 1..10000 do
+    doRound troop2
 
 troop2
 |> Array.map (fun m -> m.InspectionCounter)
