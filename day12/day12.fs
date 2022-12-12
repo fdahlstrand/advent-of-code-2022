@@ -82,30 +82,38 @@ let rec walk (state: WalkState) (pos: Position) =
 
         state
 
-let fromStrings (strings: string seq) : HeightMap * Position * Position =
+let fromStrings (strings: string seq) : HeightMap * Position * Position*Position list =
     let data = strings |> Seq.map Array.ofSeq |> Array.ofSeq
     let mutable goal = { X = 0; Y = 0 }
     let mutable start = { X = 0; Y = 0 }
+    let mutable starts: Position list = List.Empty
 
     let map =
         Array2D.init (Array.length data[0]) (Array.length data) (fun x y ->
             match data[y].[x] with
             | 'S' ->
                 start <- { X = x; Y = y }
+                starts <- { X = x; Y = y }::starts
                 Start
             | 'E' ->
                 goal <- { X = x; Y = y }
                 End
+            | 'a' ->
+                starts <- { X = x; Y = y }::starts
+                Height(chToHeight 'a')
             | ch -> Height(chToHeight ch))
+            
 
-    (map, start, goal)
+    (map, start, goal, starts)
 
 let fromFile = System.IO.File.ReadAllLines >> fromStrings
 
 let sampleMap = fromFile "./day12/sample.txt"
 let inputMap = fromFile "./day12/input.txt"
 
-let m, s, e = inputMap
+let m, s, e, ss = inputMap
+
+ss |> List.length |> printfn "%d"
 
 let state =
     { Map = m
@@ -114,4 +122,6 @@ let state =
 
 let distance = (state, e) ||> walk |> (fun s -> s.Distance)
 
-distance[s.X, s.Y] |> Option.iter (printfn "The shortest path to the peak is %d steps")
+distance[s.X, s.Y] |> Option.iter (printfn "The shortest path from S to the E is %d steps")
+
+ss |> List.map (fun p -> distance[p.X,p.Y]) |> List.choose id |> List.min |> printfn "%d"
