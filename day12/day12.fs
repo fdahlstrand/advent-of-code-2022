@@ -18,11 +18,17 @@ type WalkState =
       Distance: int option [,]
       Counter: int }
 
+type Chart =
+    { Map: HeightMap
+      EndMarker: Position
+      StartMarker: Position
+      PossibleStartMarkers: Position list }
+
 let chToHeight ch = int ch - int 'a' + 1
 
 let height (map: HeightMap) (p: Position) =
     match map[p.X, p.Y] with
-    | Start -> 0
+    | Start -> chToHeight 'a'
     | End -> chToHeight 'z'
     | Height h -> h
 
@@ -61,7 +67,6 @@ let isValidMove (state: WalkState) (src: Position) (dst: Position) =
             | Height h when (currentHeight - h) > 1 -> false
             | Height _ -> true
 
-
 let generateMoves (state: WalkState) (pos: Position) =
     [ { pos with X = pos.X + 1 }
       { pos with X = pos.X - 1 }
@@ -82,46 +87,60 @@ let rec walk (state: WalkState) (pos: Position) =
 
         state
 
-let fromStrings (strings: string seq) : HeightMap * Position * Position*Position list =
+let heightFromData (data: char [] []) (x: int) (y: int) : Marker =
+    match data[y].[x] with
+    | 'S' -> Start
+    | 'E' -> End
+    | ch -> Height(chToHeight ch)
+
+let analyzeHeightData chart (x, y, h) =
+    match h with
+    | Start -> { chart with StartMarker = { X = x; Y = y } }
+    | End -> { chart with EndMarker = { X = x; Y = y } }
+    | Height h when h = chToHeight 'a' ->
+        { chart with PossibleStartMarkers = { X = x; Y = y } :: chart.PossibleStartMarkers }
+    | _ -> chart
+
+let analyzeChart chart =
+    let state =
+        { Map = chart.Map
+          Distance = Array2D.init (Array2D.length1 chart.Map) (Array2D.length2 chart.Map) (fun _ _ -> None)
+          Counter = 0 }
+
+    let distance = (state, chart.EndMarker) ||> walk |> (fun s -> s.Distance)
+
+    distance[chart.StartMarker.X, chart.StartMarker.Y]
+    |> Option.iter (printfn "The shortest path from S to the E is %d steps")
+
+    chart.PossibleStartMarkers
+    |> List.map (fun p -> distance[p.X, p.Y])
+    |> List.choose id
+    |> List.min
+    |> printfn "The shortest possible path from a low point is %d steps"
+
+let fromStrings (strings: string seq) =
     let data = strings |> Seq.map Array.ofSeq |> Array.ofSeq
-    let mutable goal = { X = 0; Y = 0 }
-    let mutable start = { X = 0; Y = 0 }
-    let mutable starts: Position list = List.Empty
 
     let map =
-        Array2D.init (Array.length data[0]) (Array.length data) (fun x y ->
-            match data[y].[x] with
-            | 'S' ->
-                start <- { X = x; Y = y }
-                starts <- { X = x; Y = y }::starts
-                Start
-            | 'E' ->
-                goal <- { X = x; Y = y }
-                End
-            | 'a' ->
-                starts <- { X = x; Y = y }::starts
-                Height(chToHeight 'a')
-            | ch -> Height(chToHeight ch))
-            
+        Array2D.init (Array.length data[0]) (Array.length data) (heightFromData data)
 
-    (map, start, goal, starts)
+    ({ Map = map
+       EndMarker = { X = -99; Y = -99 }
+       StartMarker = { X = -99; Y = -99 }
+       PossibleStartMarkers = List.Empty },
+     seq {
+         for x in 0 .. Array2D.length1 map - 1 do
+             for y in 0 .. Array2D.length2 map - 1 do
+                 yield (x, y, map[x, y])
+     })
+    ||> Seq.fold analyzeHeightData
 
 let fromFile = System.IO.File.ReadAllLines >> fromStrings
 
 let sampleMap = fromFile "./day12/sample.txt"
 let inputMap = fromFile "./day12/input.txt"
 
-let m, s, e, ss = inputMap
-
-ss |> List.length |> printfn "%d"
-
-let state =
-    { Map = m
-      Distance = Array2D.init (Array2D.length1 m) (Array2D.length2 m) (fun _ _ -> None)
-      Counter = 0 }
-
-let distance = (state, e) ||> walk |> (fun s -> s.Distance)
-
-distance[s.X, s.Y] |> Option.iter (printfn "The shortest path from S to the E is %d steps")
-
-ss |> List.map (fun p -> distance[p.X,p.Y]) |> List.choose id |> List.min |> printfn "%d"
+printfn "==== SAMPLE MAP ===="
+analyzeChart sampleMap
+printfn "\n==== INPUT MAP ===="
+analyzeChart inputMap
