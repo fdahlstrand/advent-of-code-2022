@@ -1,6 +1,4 @@
-﻿open System.Runtime.InteropServices.JavaScript
-
-type PacketElement =
+﻿type PacketElement =
     | List of Packet
     | Number of int
 
@@ -81,16 +79,18 @@ input
 |> Seq.mapi (fun i v -> i + 1, v)
 |> Seq.filter (fun p -> snd p = -1)
 |> Seq.sumBy (fun p -> fst p)
-|> printfn "%d"
+|> printfn "Sum of correctly ordered indices: %d"
+
+let dividers = [ List [ List[Number 2] ]
+                 List [ List[Number 6] ] ]
 
 input
 |> Seq.collect (fun (a, b) -> [ a; b ])
 |> Seq.toList
-|> List.append [ List [ List[Number 2] ]
-                 List [ List[Number 6] ] ]
+|> List.append dividers 
 |> List.sortWith (fun a b -> compare (a, b))
 |> List.mapi (fun i p -> i + 1, p)
-|> List.filter (fun (i, p) -> p = List [ List[Number 2] ] || p = List [ List[Number 6] ])
+|> List.filter (fun (_, p) -> List.contains p dividers)
 |> List.map fst
 |> List.reduce (*)
-|> printfn "%d"
+|> printfn "Decoder key for distrss signal: %d"
