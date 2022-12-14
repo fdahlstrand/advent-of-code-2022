@@ -75,13 +75,17 @@ let pos =
 
 pos |> List.map (fun (p1, p2) -> line scan p1 p2) |> ignore
 
-
-let path = 
-    match "503,4 -> 502,4 -> 502,9 -> 494,9" with
+let parse str =
+    match str with
     | Path p -> p
     | _ -> failwith "Not a valid path"
 
-path |> List.pairwise |> List.map (fun (p1, p2) -> line scan p1 p2) |> ignore
+let sample:ScanData =
+    [ "498,4 -> 498,6 -> 496,6"
+      "503,4 -> 502,4 -> 502,9 -> 494,9" ] |> List.map parse
+ 
+
+sample |> List.map (fun s -> List.pairwise s |> List.map (fun (p1, p2) -> line scan p1 p2) |> ignore) |> ignore
 
 
 printScan scan 493
