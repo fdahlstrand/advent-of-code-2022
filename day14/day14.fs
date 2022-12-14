@@ -1,37 +1,40 @@
-﻿type Position = {
-    X: int
-    Y: int
-}
+﻿type Position = { X: int; Y: int }
 
 type Path = Position list
 
 type ScanData = Path list
 
-type ScanCell = | Empty | Block | Sand
+type ScanCell =
+    | Empty
+    | Block
+    | Sand
 
 type Scan = ScanCell[,]
 
 let position x y = { X = x; Y = y }
 
-let blockCell (scan:Scan) x y = 
-    scan[x, y] <- Block
+let blockCell (scan: Scan) x y = scan[x, y] <- Block
 
 let horizontalLine scan p1 p2 =
     let y = p1.Y
     let sx = min p1.X p2.X
     let ex = max p1.X p2.X
+
     for x in sx..ex do
         blockCell scan x y
+
     scan
 
 let verticalLine scan p1 p2 =
     let x = p1.X
     let sy = min p1.Y p2.Y
     let ey = max p1.Y p2.Y
+
     for y in sy..ey do
         blockCell scan x y
+
     scan
-    
+
 
 let line scan p1 p2 =
     match p1, p2 with
@@ -40,52 +43,112 @@ let line scan p1 p2 =
     | _ -> failwith "Not a horizontal or vertical line"
 
 let printScan scan startx =
-    for y in 0..Array2D.length2 scan - 1 do
-        for x in startx..Array2D.length1 scan - 1 do
-            let ch = match scan[x,y] with
-                     | Empty -> '.'
-                     | Block -> '#'
-                     | Sand -> 'o'
+    for y in 0 .. Array2D.length2 scan - 1 do
+        for x in startx .. Array2D.length1 scan - 1 do
+            let ch =
+                match scan[x, y] with
+                | Empty -> '.'
+                | Block -> '#'
+                | Sand -> 'o'
+
             printf $"%c{ch}"
+
         printfn ""
 
 open System.Text.RegularExpressions
+
 let (|Path|_|) input =
-    let m = Regex.Match(input, @"^((?<pos>(?<x>[1-9][0-9]*),(?<y>[1-9][0-9]*))(\s->\s)?)*$")
+    let m =
+        Regex.Match(input, @"^((?<pos>(?<x>[1-9][0-9]*),(?<y>[1-9][0-9]*))(\s->\s)?)*$")
+
     let toInt = System.Int32.Parse
 
     if (m.Success) then
         Some
-            [ for i in 0..m.Groups["pos"].Captures.Count - 1 do
-                let x = m.Groups["x"].Captures[i].Value |> toInt
-                let y = m.Groups["y"].Captures[i].Value |> toInt
+            [ for i in 0 .. m.Groups["pos"].Captures.Count - 1 do
+                  let x = m.Groups["x"].Captures[i].Value |> toInt
+                  let y = m.Groups["y"].Captures[i].Value |> toInt
 
-                yield position x y]
+                  yield position x y ]
     else
         None
-
-let scan = Array2D.create 505 11 Empty
-
-let pos = 
-    [
-        (position 498 4)
-        (position 498 6)
-        (position 496 6)
-    ] |> List.pairwise
-
-pos |> List.map (fun (p1, p2) -> line scan p1 p2) |> ignore
 
 let parse str =
     match str with
     | Path p -> p
     | _ -> failwith "Not a valid path"
 
-let sample:ScanData =
-    [ "498,4 -> 498,6 -> 496,6"
-      "503,4 -> 502,4 -> 502,9 -> 494,9" ] |> List.map parse
- 
+let fromFile: string -> ScanData =
+    System.IO.File.ReadAllLines >> Seq.map parse >> Seq.toList
 
-sample |> List.map (fun s -> List.pairwise s |> List.map (fun (p1, p2) -> line scan p1 p2) |> ignore) |> ignore
+let sample = fromFile "./day14/sample.txt"
 
+type ScanBoundary = { Min: Position; Max: Position }
 
-printScan scan 493
+let startState =
+    { Min = position System.Int32.MaxValue System.Int32.MaxValue
+      Max = position 0 0 }
+
+let findBoundary state pos =
+    { Min = position (min state.Min.X pos.X) (min state.Min.Y pos.Y)
+      Max = position (max state.Max.X pos.X) (max state.Max.Y pos.Y) }
+
+let mergeBoundary state boundary =
+    { Min = position (min state.Min.X boundary.Min.X) (min state.Min.Y boundary.Min.Y)
+      Max = position (max state.Max.X boundary.Max.X) (max state.Max.Y boundary.Max.Y) }
+
+let getBoundary: ScanData -> ScanBoundary =
+    List.map (List.fold findBoundary startState)
+    >> List.fold mergeBoundary startState
+
+let boundary = sample |> getBoundary
+
+boundary |> printfn "%A"
+
+let scan = Array2D.create (boundary.Max.X + 2) (boundary.Max.Y + 2) Empty
+
+sample
+|> List.map (fun s -> List.pairwise s |> List.map (fun (p1, p2) -> line scan p1 p2) |> ignore)
+|> ignore
+
+printScan scan (boundary.Min.X - 1)
+
+type MoveStatus =
+    | Move of Position
+    | Blocked of Position
+    | FreeFall
+
+let step (scan: Scan) boundary pos =
+    let move =
+        match (pos.X - 1, pos.Y + 1), (pos.X, pos.Y + 1), (pos.X + 1, pos.Y + 1) with
+        | _, (x, y), _ when scan[x, y] = Empty -> Move(position x y)
+        | (x, y), _, _ when scan[x, y] = Empty -> Move(position x y)
+        | _, _, (x, y) when scan[x, y] = Empty -> Move(position x y)
+        | _ -> Blocked pos
+
+    match move with
+    | Move p when p.Y >= boundary.Max.Y -> FreeFall
+    | _ -> move
+
+let sandStart = { X = 500; Y = 0 }
+
+type Simulation =
+    { Scan: Scan
+      Boundary: ScanBoundary
+      Pos: Position }
+
+let move state =
+    match step state.Scan state.Boundary state.Pos with
+    | Move pos -> Some(Move pos, { state with Pos = pos })
+    | Blocked pos ->
+        state.Scan[pos.Y, pos.Y] <- Sand
+        None
+    | FreeFall -> None
+
+{ Scan = scan
+  Pos = sandStart
+  Boundary = boundary }
+|> Seq.unfold move
+|> Seq.iter (printfn "%A")
+
+printScan scan (boundary.Min.X - 1)
