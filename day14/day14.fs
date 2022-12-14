@@ -1,4 +1,6 @@
-﻿type Position = { X: int; Y: int }
+﻿open System.Text.RegularExpressions
+
+type Position = { X: int; Y: int }
 
 type Path = Position list
 
@@ -10,6 +12,18 @@ type ScanCell =
     | Sand
 
 type Scan = ScanCell[,]
+
+type ScanBoundary = { Min: Position; Max: Position }
+
+type MoveStatus =
+    | Move of Position
+    | Blocked of Position
+    | FreeFall
+
+type Simulation =
+    { Scan: Scan
+      Boundary: ScanBoundary
+      Pos: Position }
 
 let position x y = { X = x; Y = y }
 
@@ -35,7 +49,6 @@ let verticalLine scan p1 p2 =
 
     scan
 
-
 let line scan p1 p2 =
     match p1, p2 with
     | a, b when a.X = b.X -> verticalLine scan a b
@@ -55,36 +68,33 @@ let printScan scan startx =
 
         printfn ""
 
-open System.Text.RegularExpressions
+module ScanData =
+    let (|Path|_|) input =
+        let m =
+            Regex.Match(input, @"^((?<pos>(?<x>[1-9][0-9]*),(?<y>[1-9][0-9]*))(\s->\s)?)*$")
 
-let (|Path|_|) input =
-    let m =
-        Regex.Match(input, @"^((?<pos>(?<x>[1-9][0-9]*),(?<y>[1-9][0-9]*))(\s->\s)?)*$")
+        let toInt = System.Int32.Parse
 
-    let toInt = System.Int32.Parse
+        if (m.Success) then
+            Some
+                [ for i in 0 .. m.Groups["pos"].Captures.Count - 1 do
+                      let x = m.Groups["x"].Captures[i].Value |> toInt
+                      let y = m.Groups["y"].Captures[i].Value |> toInt
 
-    if (m.Success) then
-        Some
-            [ for i in 0 .. m.Groups["pos"].Captures.Count - 1 do
-                  let x = m.Groups["x"].Captures[i].Value |> toInt
-                  let y = m.Groups["y"].Captures[i].Value |> toInt
+                      yield position x y ]
+        else
+            None
 
-                  yield position x y ]
-    else
-        None
+    let parse str =
+        match str with
+        | Path p -> p
+        | _ -> failwith "Not a valid path"
 
-let parse str =
-    match str with
-    | Path p -> p
-    | _ -> failwith "Not a valid path"
+    let fromFile: string -> ScanData =
+        System.IO.File.ReadAllLines >> Seq.map parse >> Seq.toList
 
-let fromFile: string -> ScanData =
-    System.IO.File.ReadAllLines >> Seq.map parse >> Seq.toList
 
-let sample = fromFile "./day14/sample.txt"
-let input = fromFile "./day14/input.txt"
 
-type ScanBoundary = { Min: Position; Max: Position }
 
 let startState =
     { Min = position System.Int32.MaxValue System.Int32.MaxValue
@@ -102,20 +112,6 @@ let getBoundary: ScanData -> ScanBoundary =
     List.map (List.fold findBoundary startState)
     >> List.fold mergeBoundary startState
 
-let boundary = input |> getBoundary
-
-boundary |> printfn "%A"
-
-let scan = Array2D.create (2*boundary.Max.X + 2) (boundary.Max.Y + 3) Empty
-
-input
-|> List.map (fun s -> List.pairwise s |> List.map (fun (p1, p2) -> line scan p1 p2) |> ignore)
-|> ignore
-
-type MoveStatus =
-    | Move of Position
-    | Blocked of Position
-    | FreeFall
 
 let step (scan: Scan) boundary pos =
     let move =
@@ -126,41 +122,35 @@ let step (scan: Scan) boundary pos =
         | _ -> Blocked pos
 
     match move with
-    | Move p when p.Y > boundary.Max.Y -> Blocked p
-    | Blocked p when p.X = 500 && p.Y = 0 -> FreeFall
+    | Move p when p.Y >= boundary.Max.Y -> FreeFall
     | _ -> move
-
-let sandStart = { X = 500; Y = 0 }
-
-type Simulation =
-    { Scan: Scan
-      Boundary: ScanBoundary
-      Pos: Position }
-
-let move state =
-    match step state.Scan state.Boundary state.Pos with
-    | Move pos -> Some(Move pos, { state with Pos = pos })
-    | Blocked pos ->
-        state.Scan[pos.X, pos.Y] <- Sand
-        None
-    | FreeFall -> None
     
-    
-let rec movex state =
+let rec move state =
     match step state.Scan state.Boundary state.Pos with
-    | Move pos -> movex { state with Pos = pos }
+    | Move pos -> move { state with Pos = pos }
     | Blocked pos ->
         state.Scan[pos.X, pos.Y] <- Sand
         Blocked pos
     | FreeFall -> FreeFall
-
-
-let start = { Scan = scan;  Pos = sandStart;  Boundary = boundary }
- 
-let mutable count = 0
-while (movex start) <> FreeFall do
-    count <- count + 1
     
-// printScan start.Scan (start.Boundary.Min.X - 10)
-// printfn ""
-printfn $"%d{count} units of sand come to rest"
+let runSimulation data =
+    let boundary = data |> getBoundary  
+    let scan = Array2D.create (2*boundary.Max.X + 2) (boundary.Max.Y + 3) Empty
+    let sandStart = { X = 500; Y = 0 }
+
+    data
+    |> List.map (fun s -> List.pairwise s |> List.map (fun (p1, p2) -> line scan p1 p2) |> ignore)
+    |> ignore
+    
+    let start = { Scan = scan;  Pos = sandStart;  Boundary = boundary }
+
+    let mutable count = 0
+    while (move start) <> FreeFall do
+        count <- count + 1
+
+    count
+
+let sample = ScanData.fromFile "./day14/sample.txt"
+let input = ScanData.fromFile "./day14/input.txt"
+
+runSimulation sample |> printfn "%d units of sand come to rest"
