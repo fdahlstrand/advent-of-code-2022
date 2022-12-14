@@ -106,13 +106,11 @@ let boundary = input |> getBoundary
 
 boundary |> printfn "%A"
 
-let scan = Array2D.create (boundary.Max.X + 2) (boundary.Max.Y + 2) Empty
+let scan = Array2D.create (2*boundary.Max.X + 2) (boundary.Max.Y + 3) Empty
 
 input
 |> List.map (fun s -> List.pairwise s |> List.map (fun (p1, p2) -> line scan p1 p2) |> ignore)
 |> ignore
-
-printScan scan (boundary.Min.X - 1)
 
 type MoveStatus =
     | Move of Position
@@ -128,7 +126,8 @@ let step (scan: Scan) boundary pos =
         | _ -> Blocked pos
 
     match move with
-    | Move p when p.Y >= boundary.Max.Y -> FreeFall
+    | Move p when p.Y > boundary.Max.Y -> Blocked p
+    | Blocked p when p.X = 500 && p.Y = 0 -> FreeFall
     | _ -> move
 
 let sandStart = { X = 500; Y = 0 }
@@ -162,6 +161,6 @@ let mutable count = 0
 while (movex start) <> FreeFall do
     count <- count + 1
     
-printScan start.Scan (start.Boundary.Min.X - 1)
-printfn ""
+// printScan start.Scan (start.Boundary.Min.X - 10)
+// printfn ""
 printfn $"%d{count} units of sand come to rest"
