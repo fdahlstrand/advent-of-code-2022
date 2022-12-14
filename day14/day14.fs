@@ -13,17 +13,19 @@ type ScanCell =
 
 type Scan = ScanCell[,]
 
-type ScanBoundary = { Min: Position; Max: Position }
-
 type MoveStatus =
     | Move of Position
-    | Blocked of Position
+    | Rest of Position
     | FreeFall
+    | Full
 
-type Simulation =
+type SimulationMode = | Abyss | Floor
+
+type SimulationState =
     { Scan: Scan
-      Boundary: ScanBoundary
-      Pos: Position }
+      Height: int
+      Pos: Position
+      Floor: int option }
 
 let position x y = { X = x; Y = y }
 
@@ -37,8 +39,6 @@ let horizontalLine scan p1 p2 =
     for x in sx..ex do
         blockCell scan x y
 
-    scan
-
 let verticalLine scan p1 p2 =
     let x = p1.X
     let sy = min p1.Y p2.Y
@@ -46,8 +46,6 @@ let verticalLine scan p1 p2 =
 
     for y in sy..ey do
         blockCell scan x y
-
-    scan
 
 let line scan p1 p2 =
     match p1, p2 with
@@ -93,64 +91,68 @@ module ScanData =
     let fromFile: string -> ScanData =
         System.IO.File.ReadAllLines >> Seq.map parse >> Seq.toList
 
-
-
-
-let startState =
-    { Min = position System.Int32.MaxValue System.Int32.MaxValue
-      Max = position 0 0 }
-
-let findBoundary state pos =
-    { Min = position (min state.Min.X pos.X) (min state.Min.Y pos.Y)
-      Max = position (max state.Max.X pos.X) (max state.Max.Y pos.Y) }
-
-let mergeBoundary state boundary =
-    { Min = position (min state.Min.X boundary.Min.X) (min state.Min.Y boundary.Min.Y)
-      Max = position (max state.Max.X boundary.Max.X) (max state.Max.Y boundary.Max.Y) }
-
-let getBoundary: ScanData -> ScanBoundary =
-    List.map (List.fold findBoundary startState)
-    >> List.fold mergeBoundary startState
-
-
-let step (scan: Scan) boundary pos =
+let step (scan: Scan) height floor pos =
     let move =
         match (pos.X - 1, pos.Y + 1), (pos.X, pos.Y + 1), (pos.X + 1, pos.Y + 1) with
         | _, (x, y), _ when scan[x, y] = Empty -> Move(position x y)
         | (x, y), _, _ when scan[x, y] = Empty -> Move(position x y)
         | _, _, (x, y) when scan[x, y] = Empty -> Move(position x y)
-        | _ -> Blocked pos
+        | _ -> Rest pos
 
-    match move with
-    | Move p when p.Y >= boundary.Max.Y -> FreeFall
-    | _ -> move
-    
+    match floor with
+    | None ->
+        match move with
+        | Move p when p.Y >= height -> FreeFall
+        | _ -> move
+    | Some h ->
+        match move with
+        | Move p when p.Y > h -> Rest p
+        | Rest p when p.X = 500 && p.Y = 0 -> Full
+        | _ -> move
+        
+
 let rec move state =
-    match step state.Scan state.Boundary state.Pos with
+    match step state.Scan state.Height state.Floor state.Pos with
     | Move pos -> move { state with Pos = pos }
-    | Blocked pos ->
+    | Rest pos ->
         state.Scan[pos.X, pos.Y] <- Sand
-        Blocked pos
-    | FreeFall -> FreeFall
-    
-let runSimulation data =
-    let boundary = data |> getBoundary  
-    let scan = Array2D.create (2*boundary.Max.X + 2) (boundary.Max.Y + 3) Empty
+        Rest pos
+    | s -> s
+
+let updateScan scan path =
+    List.pairwise path |> List.iter (fun (p1, p2) -> line scan p1 p2)
+
+let runSimulation data mode =
+    let height =
+        data |> List.map (List.maxBy (fun p -> p.Y) >> (fun p -> p.Y)) |> List.max
+
+    let scan = Array2D.create 1000 (height + 2) Empty
     let sandStart = { X = 500; Y = 0 }
 
-    data
-    |> List.map (fun s -> List.pairwise s |> List.map (fun (p1, p2) -> line scan p1 p2) |> ignore)
-    |> ignore
-    
-    let start = { Scan = scan;  Pos = sandStart;  Boundary = boundary }
+    List.iter (updateScan scan) data
 
-    let mutable count = 0
-    while (move start) <> FreeFall do
-        count <- count + 1
+    let simulationState =
+        { Scan = scan
+          Pos = sandStart
+          Height = height
+          Floor = match mode with
+                  | Abyss -> None
+                  | Floor -> Some height }
 
-    count
+    match mode with
+    | Abyss ->
+        let notFreeFall = (<>) FreeFall
+        Seq.initInfinite (fun _ -> move simulationState)
+        |> Seq.takeWhile notFreeFall
+        |> Seq.length
+    | Floor ->
+        let notFull = (<>) Full
+        Seq.initInfinite (fun _ -> move simulationState)
+        |> Seq.takeWhile notFull
+        |> Seq.length |> (+) 1
 
 let sample = ScanData.fromFile "./day14/sample.txt"
 let input = ScanData.fromFile "./day14/input.txt"
 
-runSimulation sample |> printfn "%d units of sand come to rest"
+runSimulation input Abyss |> printfn "%d units of sand come to rest"
+runSimulation input Floor |> printfn "%d units of sand come to rest"
