@@ -102,13 +102,13 @@ let getBoundary: ScanData -> ScanBoundary =
     List.map (List.fold findBoundary startState)
     >> List.fold mergeBoundary startState
 
-let boundary = sample |> getBoundary
+let boundary = input |> getBoundary
 
 boundary |> printfn "%A"
 
 let scan = Array2D.create (boundary.Max.X + 2) (boundary.Max.Y + 2) Empty
 
-sample
+input
 |> List.map (fun s -> List.pairwise s |> List.map (fun (p1, p2) -> line scan p1 p2) |> ignore)
 |> ignore
 
@@ -161,7 +161,7 @@ let start = { Scan = scan;  Pos = sandStart;  Boundary = boundary }
 let mutable count = 0
 while (movex start) <> FreeFall do
     count <- count + 1
-    printScan start.Scan (start.Boundary.Min.X - 1)
-    printfn ""
     
+printScan start.Scan (start.Boundary.Min.X - 1)
+printfn ""
 printfn $"%d{count} units of sand come to rest"
