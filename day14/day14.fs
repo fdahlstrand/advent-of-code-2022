@@ -82,6 +82,7 @@ let fromFile: string -> ScanData =
     System.IO.File.ReadAllLines >> Seq.map parse >> Seq.toList
 
 let sample = fromFile "./day14/sample.txt"
+let input = fromFile "./day14/input.txt"
 
 type ScanBoundary = { Min: Position; Max: Position }
 
@@ -141,14 +142,26 @@ let move state =
     match step state.Scan state.Boundary state.Pos with
     | Move pos -> Some(Move pos, { state with Pos = pos })
     | Blocked pos ->
-        state.Scan[pos.Y, pos.Y] <- Sand
+        state.Scan[pos.X, pos.Y] <- Sand
         None
     | FreeFall -> None
+    
+    
+let rec movex state =
+    match step state.Scan state.Boundary state.Pos with
+    | Move pos -> movex { state with Pos = pos }
+    | Blocked pos ->
+        state.Scan[pos.X, pos.Y] <- Sand
+        Blocked pos
+    | FreeFall -> FreeFall
 
-{ Scan = scan
-  Pos = sandStart
-  Boundary = boundary }
-|> Seq.unfold move
-|> Seq.iter (printfn "%A")
 
-printScan scan (boundary.Min.X - 1)
+let start = { Scan = scan;  Pos = sandStart;  Boundary = boundary }
+ 
+let mutable count = 0
+while (movex start) <> FreeFall do
+    count <- count + 1
+    printScan start.Scan (start.Boundary.Min.X - 1)
+    printfn ""
+    
+printfn $"%d{count} units of sand come to rest"

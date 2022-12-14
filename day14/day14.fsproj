@@ -7,6 +7,8 @@
 
   <ItemGroup>
     <Compile Include="day14.fs" />
+    <Content Include="sample.txt" />
+    <Content Include="input.txt" />
   </ItemGroup>
 
 </Project>
