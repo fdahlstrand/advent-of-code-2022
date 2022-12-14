@@ -3,6 +3,10 @@
     Y: int
 }
 
+type Path = Position list
+
+type ScanData = Path list
+
 type ScanCell = | Empty | Block | Sand
 
 type Scan = ScanCell[,]
@@ -43,15 +47,41 @@ let printScan scan startx =
                      | Block -> '#'
                      | Sand -> 'o'
             printf $"%c{ch}"
-        printfn "" 
+        printfn ""
 
-let scan = Array2D.create 500 10 Empty
+open System.Text.RegularExpressions
+let (|Path|_|) input =
+    let m = Regex.Match(input, @"^((?<pos>(?<x>[1-9][0-9]*),(?<y>[1-9][0-9]*))(\s->\s)?)*$")
+    let toInt = System.Int32.Parse
 
-let pos = [
-    (position 498 4), (position 498 6)
-    (position 498 6), (position 496 6)
-]
+    if (m.Success) then
+        Some
+            [ for i in 0..m.Groups["pos"].Captures.Count - 1 do
+                let x = m.Groups["x"].Captures[i].Value |> toInt
+                let y = m.Groups["y"].Captures[i].Value |> toInt
+
+                yield position x y]
+    else
+        None
+
+let scan = Array2D.create 505 11 Empty
+
+let pos = 
+    [
+        (position 498 4)
+        (position 498 6)
+        (position 496 6)
+    ] |> List.pairwise
 
 pos |> List.map (fun (p1, p2) -> line scan p1 p2) |> ignore
 
-printScan scan 490
+
+let path = 
+    match "503,4 -> 502,4 -> 502,9 -> 494,9" with
+    | Path p -> p
+    | _ -> failwith "Not a valid path"
+
+path |> List.pairwise |> List.map (fun (p1, p2) -> line scan p1 p2) |> ignore
+
+
+printScan scan 493
