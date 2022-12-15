@@ -123,36 +123,35 @@ let fromStrings (ss: string seq) =
 
 let fromFile = System.IO.File.ReadAllLines >> fromStrings
 
-let sample = fromFile "./day15/sample.txt"
+
 
 printfn "==============="
 
-let bs = sample.Beacons |> Set.filter (fun b -> b.Position.Y = 10)
+// let sample = fromFile "./day15/sample.txt"
+// let yTarget = 10
+let input = fromFile "./day15/input.txt"
+let yTarget = 2000000
 
-let ranges =
-    sample.Sensors
+let bs = input.Beacons |> Set.filter (fun b -> b.Position.Y = yTarget) |> Set.map (fun b -> b.Position)
+// let sensors = sample.Sensors |> List.map (fun s -> s.Position) |> Set.ofList |> Set.filter (fun b -> b.Position.Y = 10) |> Set.map (fun b -> b.Position)
+let sets =
+    input.Sensors
     |> List.map (fun s ->
-        match yDist s.Position 10 with
+        match yDist s.Position yTarget with
         | d when d <= s.Distance -> Some(s, d)
         | _ -> None)
     |> List.choose id
-    |> List.map (fun (s, d) -> range (s.Position.X - (s.Distance - d)) (s.Position.X + (s.Distance - d)))
-
-let inRange r v =
-    match Range.length r with
-    | 0 -> false
-    | _ ->
-        match r.Start, r.End with
-        | s, e when s <= v && v <= e -> true
-        | _ -> false
-
-let split r v =
-    match inRange r v with
-    | false -> [ r ]
-    | true ->
-        [ { Start = r.Start; End = v - 1 }; { Start = v + 1; End = r.End } ]
-        |> List.filter (fun r -> Range.length r > 0)
-
-Seq.allPairs ranges bs
-|> Seq.collect (fun (r, b) -> split r b.Position.X)
-|> printfn "%A"
+    |> List.map (fun (s, d) -> [(s.Position.X - (s.Distance - d))..(s.Position.X + (s.Distance - d))])
+    |> List.map Set.ofList
+    |> List.map (Set.map (fun x -> coord x yTarget))
+    |> List.map (fun s -> Set.difference s bs)
+    //|> List.iter (printfn "%A")
+    |> Set.unionMany
+    // |> Set.count
+    
+    
+    
+// sets |> Set.iter (fun c -> printfn $"(%d{c.X},%d{c.Y})")
+sets |> Set.count |> printfn "%d"
+    
+    
