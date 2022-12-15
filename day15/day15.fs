@@ -1,4 +1,6 @@
-﻿type Coordinate = { X: int; Y: int }
+﻿open System
+
+type Coordinate = { X: int; Y: int }
 
 type Range = { Start: int; End: int }
 
@@ -127,31 +129,72 @@ let fromFile = System.IO.File.ReadAllLines >> fromStrings
 
 printfn "==============="
 
-// let sample = fromFile "./day15/sample.txt"
-// let yTarget = 10
-let input = fromFile "./day15/input.txt"
-let yTarget = 2000000
+let sensorCoverage data target =
+    let bs =
+        data.Beacons
+        |> Set.filter (fun b -> b.Position.Y = target)
+        |> Set.map (fun b -> b.Position)
 
-let bs = input.Beacons |> Set.filter (fun b -> b.Position.Y = yTarget) |> Set.map (fun b -> b.Position)
-// let sensors = sample.Sensors |> List.map (fun s -> s.Position) |> Set.ofList |> Set.filter (fun b -> b.Position.Y = 10) |> Set.map (fun b -> b.Position)
-let sets =
-    input.Sensors
+    data.Sensors
     |> List.map (fun s ->
-        match yDist s.Position yTarget with
+        match yDist s.Position target with
         | d when d <= s.Distance -> Some(s, d)
         | _ -> None)
     |> List.choose id
-    |> List.map (fun (s, d) -> [(s.Position.X - (s.Distance - d))..(s.Position.X + (s.Distance - d))])
+    |> List.map (fun (s, d) -> [ (s.Position.X - (s.Distance - d)) .. (s.Position.X + (s.Distance - d)) ])
     |> List.map Set.ofList
-    |> List.map (Set.map (fun x -> coord x yTarget))
+    |> List.map (Set.map (fun x -> coord x target))
     |> List.map (fun s -> Set.difference s bs)
-    //|> List.iter (printfn "%A")
     |> Set.unionMany
-    // |> Set.count
-    
-    
-    
-// sets |> Set.iter (fun c -> printfn $"(%d{c.X},%d{c.Y})")
-sets |> Set.count |> printfn "%d"
-    
-    
+
+let reachable y (sensor: Sensor) =
+    match yDist sensor.Position y with
+    | d when d <= sensor.Distance -> true
+    | _ -> false
+
+let coverage y sensor =
+    let dx = sensor.Distance - (yDist sensor.Position y)
+    range (sensor.Position.X - dx) (sensor.Position.X + dx)
+
+
+let rec cullOptions o r =
+    match o.Start, o.End, r.Start, r.End with
+    | a, b, _, _ when b < a -> []
+    | _, _, s, e when e < s -> [ o ]
+    | a, b, s, e when s < a && e > b -> []
+    | a, _, s, e when s < a && e < a -> [ o ]
+    | a, b, s, e when s < a && e <= b -> [ range (e + 1) b ]
+    | a, b, s, e when s >= a && s <= b && e >= b -> [ range a (s - 1) ]
+    | a, b, s, e when s >= a && s <= b && e <= b -> [ range a (s - 1); range (e + 1) b ]
+    | a, b, s, e when s > b && e > b -> [ o ]
+    | _ -> failwith "I didn't think of that..."
+    |> List.filter (fun r -> Range.length r > 0)
+
+let removeOptions options range =
+    options |> List.collect (fun o -> cullOptions o range)
+
+let removeOptionsFromLine sensors range line =
+    line,
+    sensors
+    |> List.filter (reachable line)
+    |> List.map (coverage line)
+    |> List.fold removeOptions [ range ]
+
+let frequency x y = int64 (x) * 4_000_000L + int64 (y)
+
+let findTuningFrequency data range =
+    [ range.Start .. range.End ]
+    |> List.map (removeOptionsFromLine data.Sensors range)
+    |> List.filter (fun (_, r) -> r.Length > 0)
+    |> List.collect (fun (y, l) ->
+        l
+        |> List.collect (fun r -> [ r.Start .. r.End ] |> List.map (fun x -> frequency x y)))
+
+let sample = fromFile "./day15/sample.txt"
+let input = fromFile "./day15/input.txt"
+
+sensorCoverage sample 10 |> Set.count |> printfn "Row 10 contains %d non-beacon positions"
+sensorCoverage input 2_000_000 |> Set.count |> printfn "Row 2.000.000 contains %d non-beacon positions"
+
+findTuningFrequency sample (range 0 20) |> printfn "Possible tuning frequencies: %A"
+findTuningFrequency input (range 0 4_000_000) |> printfn "Possible tuning frequencies: %A"
