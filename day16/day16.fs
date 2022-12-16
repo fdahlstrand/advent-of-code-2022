@@ -37,7 +37,6 @@ let start =
     { OpenValves = Set.empty
       Location = "AA" }
 
-
 let actions src valves cave =
     let v = Map.find src cave
     let moves = Valve.tunnels v |> List.map (fun s -> MoveTo s)
@@ -73,8 +72,43 @@ let tick state =
         )
 
 
-{ Cave = cave
-  State = start
-  Actions = actions "AA" Set.empty<string> cave }
-|> Seq.unfold tick
-|> printfn "%A"
+// { Cave = cave
+//   State = start
+//   Actions = actions "AA" Set.empty<string> cave }
+// |> Seq.unfold tick
+// |> printfn "%A"
+
+let indices = cave |> Map.keys |> Array.ofSeq |> Array.sort
+let indexOf str = indices |> Array.findIndex ((=) str)
+printfn "%A" (indexOf "CC")
+
+let isConnected i j =
+    let vi = indices[i]
+    let vj = indices[j]
+
+    (Map.find vi cave).Tunnels |> List.contains vj
+
+
+let valves = Map.count cave
+let V = Array2D.create valves valves 1000
+
+
+for i in 0 .. valves - 1 do
+    for j in 0 .. valves - 1 do
+        V[i, j] <-
+            match isConnected i j with
+            | true -> 1
+            | false -> 1000
+
+for i in 0 .. valves - 1 do
+    V[i, i] <- 0
+
+for k in 0 .. valves - 1 do
+    for i in 0 .. valves - 1 do
+        for j in 0 .. valves - 1 do
+            if V[i, j] > V[i, k] + V[k, j] then
+                V[i, j] <- V[i, k] + V[k, j]
+
+
+
+printfn "%A" V
