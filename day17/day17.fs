@@ -1,5 +1,6 @@
 ﻿type Coordinate = int * int
-type RockTemplate = Coordinate list
+
+type RockShape = Shape of (int * int) list
 
 type JetDirection =
     | Left
@@ -7,31 +8,25 @@ type JetDirection =
 
 type RoomState =
     { Height: int
+      Blocked: bool[,]
       JetClock: int
-      JetGenerator: int -> JetDirection }
+      JetGenerator: int -> JetDirection
+      RockClock: int
+      RockGenerator: int -> RockShape }
 
 type Room<'a> = Room of (RoomState -> 'a * RoomState)
-
-let rocks: RockTemplate[] =
-    [| [ (0, 0); (1, 0); (2, 0); (3, 0) ]
-       [ (1, 0); (0, 1); (1, 1); (2, 1); (1, 2) ]
-       [ (0, 0); (1, 0); (2, 0); (2, 1); (2, 2) ]
-       [ (0, 0); (0, 1); (0, 2); (0, 3) ]
-       [ (0, 0); (1, 0); (0, 1); (1, 1) ] |]
-
-let jetPattern = ">>><<><>><<<>><>>><<<>>><<<><<<>><>><<>>"
-
-
-type RockShape = Shape of (int * int) list
 
 type LiveRock =
     | Falling of (int * int) list
     | Resting of (int * int) list
 
+let offsetCoord xoffset yoffset (x, y) = (x + xoffset, y + yoffset)
+
 let makeLiveRock rock =
     let addLiveRock room =
+        let startOffset = offsetCoord 2 (room.Height + 3)
         let (Shape shape) = rock
-        Falling(shape |> List.map (fun (x, y) -> (x + 2, y + room.Height + 3))), room
+        Falling(shape |> List.map startOffset), room
 
     Room addLiveRock
 
@@ -39,6 +34,108 @@ let getJetDirection room =
     let dir = room.JetClock |> room.JetGenerator
 
     dir, { room with JetClock = room.JetClock + 1 }
+
+let getRock room =
+    let rock = room.RockClock |> room.RockGenerator
+
+    rock, { room with RockClock = room.RockClock + 1 }
+
+let pushRock dir rock =
+    let doPushRock room =
+        let pushLeft = offsetCoord -1 0
+        let pushRight = offsetCoord 1 0
+        let isInRoom (x, _) = 0 <= x && x < 7
+        let isAllInRoom = List.map isInRoom >> List.reduce (&&)
+
+        let push =
+            match dir with
+            | Left -> pushLeft
+            | Right -> pushRight
+
+        let pushedRock =
+            match rock with
+            | Falling r ->
+                let nextRock = r |> List.map push
+
+                match isAllInRoom nextRock with
+                | true -> Falling r
+                | false -> rock
+            | _ -> rock
+
+        pushedRock, room
+
+    Room doPushRock
+
+let fallOneUnit rock =
+    let doFallOneUnit room =
+        let fall = offsetCoord 0 -1
+        let isBlocked (x, y) = room.Blocked[x, y]
+        let isSomePartBlocked = List.map isBlocked >> List.reduce (||)
+
+        let fallingRock =
+            match rock with
+            | Falling r ->
+                let nextRock = r |> List.map fall
+
+                match isSomePartBlocked nextRock with
+                | true -> Resting r
+                | false -> Falling nextRock
+            | _ -> rock
+
+        fallingRock, room
+
+    Room doFallOneUnit
+
+let putRockToRest rock =
+    let doPutRockToRest room =
+        let h =
+            match rock with
+            | Resting r -> r |> List.map snd |> List.max |> max room.Height
+            | _ -> room.Height
+
+        match rock with
+        | Resting r -> r |> List.iter (fun (x, y) -> room.Blocked[x, y] <- true)
+        | _ -> ()
+
+        (), { room with Height = h }
+
+    Room doPutRockToRest
+
+let rocks: RockShape[] =
+    [| Shape [ (0, 0); (1, 0); (2, 0); (3, 0) ]
+       Shape [ (1, 0); (0, 1); (1, 1); (2, 1); (1, 2) ]
+       Shape [ (0, 0); (1, 0); (2, 0); (2, 1); (2, 2) ]
+       Shape [ (0, 0); (0, 1); (0, 2); (0, 3) ]
+       Shape [ (0, 0); (1, 0); (0, 1); (1, 1) ] |]
+
+let jetPattern = ">>><<><>><<<>><>>><<<>>><<<><<<>><>><<>>" |> Seq.map (fun ch -> 
+    match ch with
+    | '>' -> Right
+    | '<' -> Left
+    | _ -> failwith $"Unexpected character ('%c{ch}') is stream definition") |> Seq.toArray
+
+let createRoom () =
+    { Blocked = Array2D.create 7 10_000 false
+      Height = 0
+      RockClock = 0
+      RockGenerator = fun i -> rocks[i % rocks.Length]
+      JetClock = 0
+      JetGenerator = fun i -> jetPattern[i % jetPattern.Length] }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 //
 // let rockGenerator = Seq.initInfinite (fun i -> rocks[i % rocks.Length])
