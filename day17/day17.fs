@@ -16,6 +16,37 @@ type RoomState =
 
 type Room<'a> = Room of (RoomState -> 'a * RoomState)
 
+module Room =
+    let run (Room f) state = f state
+
+type RoomBuilder() =
+    member this.Return(x) = Room(fun s -> x, s)
+
+    member this.Bind(x, f) =
+        let innerFn state =
+            let a, nextState = Room.run x state
+            let b = f a
+            Room.run b nextState
+
+        Room innerFn
+
+    member this.Delay(f) = f ()
+
+    member this.Zero() = Room(fun s -> (), s)
+
+    member this.Combine(x1: Room<'a>, x2: Room<'b>) =
+        Room(fun s ->
+            let _, s2 = Room.run x1 s
+            Room.run x2 s2)
+
+    member this.While(f, x) =
+        if f () then
+            this.Bind(x, (fun () -> this.While(f, x)))
+        else
+            this.Zero()
+
+let room = new RoomBuilder()
+
 type LiveRock =
     | Falling of (int * int) list
     | Resting of (int * int) list
@@ -30,15 +61,21 @@ let makeLiveRock rock =
 
     Room addLiveRock
 
-let getJetDirection room =
-    let dir = room.JetClock |> room.JetGenerator
+let getJetDirection =
+    let doGet room =
+        let dir = room.JetClock |> room.JetGenerator
 
-    dir, { room with JetClock = room.JetClock + 1 }
+        dir, { room with JetClock = room.JetClock + 1 }
 
-let getRock room =
-    let rock = room.RockClock |> room.RockGenerator
+    Room doGet
 
-    rock, { room with RockClock = room.RockClock + 1 }
+let getRock =
+    let doGet room =
+        let rock = room.RockClock |> room.RockGenerator
+
+        rock, { room with RockClock = room.RockClock + 1 }
+
+    Room doGet
 
 let pushRock dir rock =
     let doPushRock room =
@@ -69,7 +106,10 @@ let pushRock dir rock =
 let fallOneUnit rock =
     let doFallOneUnit room =
         let fall = offsetCoord 0 -1
-        let isBlocked (x, y) = room.Blocked[x, y]
+
+        let isBlocked (x, y) =
+            if (y >= 0) then room.Blocked[x, y] else true
+
         let isSomePartBlocked = List.map isBlocked >> List.reduce (||)
 
         let fallingRock =
@@ -108,13 +148,16 @@ let rocks: RockShape[] =
        Shape [ (0, 0); (0, 1); (0, 2); (0, 3) ]
        Shape [ (0, 0); (1, 0); (0, 1); (1, 1) ] |]
 
-let jetPattern = ">>><<><>><<<>><>>><<<>>><<<><<<>><>><<>>" |> Seq.map (fun ch -> 
-    match ch with
-    | '>' -> Right
-    | '<' -> Left
-    | _ -> failwith $"Unexpected character ('%c{ch}') is stream definition") |> Seq.toArray
+let jetPattern =
+    ">>><<><>><<<>><>>><<<>>><<<><<<>><>><<>>"
+    |> Seq.map (fun ch ->
+        match ch with
+        | '>' -> Right
+        | '<' -> Left
+        | _ -> failwith $"Unexpected character ('%c{ch}') is stream definition")
+    |> Seq.toArray
 
-let createRoom () =
+let startRoom =
     { Blocked = Array2D.create 7 10_000 false
       Height = 0
       RockClock = 0
@@ -122,6 +165,25 @@ let createRoom () =
       JetClock = 0
       JetGenerator = fun i -> jetPattern[i % jetPattern.Length] }
 
+let next =
+    room {
+        let! r = getRock
+        let! live = makeLiveRock r
+        return live
+    }
+
+let bar r =
+    room {
+        let! rock = fallOneUnit r
+        return rock
+    }
+
+let yada r =
+    fallOneUnit
+
+
+
+startRoom |> Seq.unfold yada
 
 
 
