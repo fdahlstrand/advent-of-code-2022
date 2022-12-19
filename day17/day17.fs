@@ -17,35 +17,25 @@ type RoomState =
 type Room<'a> = Room of (RoomState -> 'a * RoomState)
 
 module Room =
-    let run (Room f) state = f state
+    let run (Room f) room = f room
 
-type RoomBuilder() =
-    member this.Return(x) = Room(fun s -> x, s)
+    let map f x =
+        let doMap room =
+            let y, r = run x room
+            f y, r
 
-    member this.Bind(x, f) =
-        let innerFn state =
-            let a, nextState = Room.run x state
-            let b = f a
-            Room.run b nextState
+        Room doMap
 
-        Room innerFn
 
-    member this.Delay(f) = f ()
+    let bind f a =
+        let doBind room =
+            let x, updatedRoom = run a room
+            run (f x) updatedRoom
 
-    member this.Zero() = Room(fun s -> (), s)
+        Room doBind
 
-    member this.Combine(x1: Room<'a>, x2: Room<'b>) =
-        Room(fun s ->
-            let _, s2 = Room.run x1 s
-            Room.run x2 s2)
 
-    member this.While(f, x) =
-        if f () then
-            this.Bind(x, (fun () -> this.While(f, x)))
-        else
-            this.Zero()
 
-let room = new RoomBuilder()
 
 type LiveRock =
     | Falling of (int * int) list
@@ -165,30 +155,12 @@ let startRoom =
       JetClock = 0
       JetGenerator = fun i -> jetPattern[i % jetPattern.Length] }
 
-let next =
-    room {
-        let! r = getRock
-        let! live = makeLiveRock r
-        return live
-    }
 
-let bar r =
-    room {
-        let! rock = fallOneUnit r
-        return rock
-    }
-
-let yada r =
-    fallOneUnit
-
-
-
-startRoom |> Seq.unfold yada
-
-
-
-
-
+let isFalling =
+    Room.map (fun rock ->
+        match rock with
+        | Falling _ -> true
+        | Resting _ -> false)
 
 
 
