@@ -1,319 +1,140 @@
-﻿type Coordinate = int * int
-
-type RockShape = Shape of (int * int) list
+﻿type CircularBuffer<'a> = { Index: int; Data: 'a[] }
 
 type JetDirection =
     | Left
     | Right
 
-type RoomState =
-    { Height: int
-      Blocked: bool[,]
-      JetClock: int
-      JetGenerator: int -> JetDirection
-      RockClock: int
-      RockGenerator: int -> RockShape }
+type Rock = Rock of (int * int) list
 
-type Room<'a> = Room of (RoomState -> 'a * RoomState)
+type Room =
+    { JetSource: CircularBuffer<JetDirection>
+      RockSource: CircularBuffer<Rock>
+      Blocked: Set<int * int>
+      ActiveRock: Rock option
+      Height: int }
+
+module CircularBuffer =
+    let create data = { Index = 0; Data = Seq.toArray data }
+
+    let next buffer =
+        buffer.Data[buffer.Index], { buffer with Index = (buffer.Index + 1) % buffer.Data.Length }
 
 module Room =
-    let run (Room f) state = f state
+    let getNextJet room =
+        let jet, src = room.JetSource |> CircularBuffer.next
+        jet, { room with JetSource = src }
 
-type RoomBuilder() =
-    member this.Return(x) = Room(fun s -> x, s)
+    let getNextRock room =
+        let rock, src = room.RockSource |> CircularBuffer.next
+        rock, { room with RockSource = src }
 
-    member this.Bind(x, f) =
-        let innerFn state =
-            let a, nextState = Room.run x state
-            let b = f a
-            Room.run b nextState
+    let injectRock (Rock rock) room =
+        let offset dx dy (x, y) = (x + dx, y + dy)
 
-        Room innerFn
+        let newRock = rock |> List.map (offset 2 (room.Height + 3))
 
-    member this.Delay(f) = f ()
+        { room with ActiveRock = Some(Rock newRock) }
 
-    member this.Zero() = Room(fun s -> (), s)
+    let isRockAtBottom rock =
+        rock |> List.fold (fun acc (_, y) -> acc || (y < 0)) false
 
-    member this.Combine(x1: Room<'a>, x2: Room<'b>) =
-        Room(fun s ->
-            let _, s2 = Room.run x1 s
-            Room.run x2 s2)
+    let isBlocked rock room =
+        rock |> List.map (fun c -> Set.contains c room.Blocked) |> List.reduce (||)
 
-    member this.While(f, x) =
-        if f () then
-            this.Bind(x, (fun () -> this.While(f, x)))
-        else
-            this.Zero()
+    let inBounds rock room =
+        match isBlocked rock room with
+        | true -> false
+        | false -> rock |> List.map (fun (x, _) -> 0 <= x && x < 7) |> List.reduce (&&)
 
-let room = new RoomBuilder()
 
-type LiveRock =
-    | Falling of (int * int) list
-    | Resting of (int * int) list
+    let pushRock room =
+        match room.ActiveRock with
+        | Some(Rock r) ->
+            let jet, room' = getNextJet room
 
-let offsetCoord xoffset yoffset (x, y) = (x + xoffset, y + yoffset)
+            let pushedRock =
+                match jet with
+                | Left -> r |> List.map (fun (x, y) -> (x - 1, y))
+                | Right -> r |> List.map (fun (x, y) -> (x + 1, y))
 
-let makeLiveRock rock =
-    let addLiveRock room =
-        let startOffset = offsetCoord 2 (room.Height + 3)
-        let (Shape shape) = rock
-        Falling(shape |> List.map startOffset), room
+            { room' with ActiveRock = Some(Rock(if (inBounds pushedRock room) then pushedRock else r)) }
+        | None -> room
 
-    Room addLiveRock
+    let fuseActiveRock room =
+        match room.ActiveRock with
+        | Some(Rock r) ->
+            { room with
+                Blocked = r |> Set.ofList |> Set.union room.Blocked
+                Height = r |> List.maxBy snd |> snd |> (+) 1 |> max room.Height
+                ActiveRock = None }
+        | None -> room
 
-let getJetDirection =
-    let doGet room =
-        let dir = room.JetClock |> room.JetGenerator
 
-        dir, { room with JetClock = room.JetClock + 1 }
+    let dropRock room =
+        // Look into using Option.map
+        let room' = pushRock room
 
-    Room doGet
+        match room'.ActiveRock with
+        | Some(Rock r) ->
+            let newRock = r |> List.map (fun (x, y) -> (x, y - 1))
 
-let getRock =
-    let doGet room =
-        let rock = room.RockClock |> room.RockGenerator
+            match (isRockAtBottom newRock) || (isBlocked newRock room') with
+            | true ->
+                { room' with
+                    Blocked = r |> Set.ofList |> Set.union room.Blocked
+                    Height = r |> List.maxBy snd |> snd |> (+) 1 |> max room.Height
+                    ActiveRock = None }
+            | false -> { room' with ActiveRock = Some(Rock newRock) }
+        | None -> room'
 
-        rock, { room with RockClock = room.RockClock + 1 }
 
-    Room doGet
+    let rec dropRockToBottom room =
+        match room.ActiveRock with
+        | Some _ -> dropRockToBottom (dropRock room)
+        | None -> room
 
-let pushRock dir rock =
-    let doPushRock room =
-        let pushLeft = offsetCoord -1 0
-        let pushRight = offsetCoord 1 0
-        let isInRoom (x, _) = 0 <= x && x < 7
-        let isAllInRoom = List.map isInRoom >> List.reduce (&&)
+    let nextRock room =
+        room |> getNextRock ||> injectRock |> dropRockToBottom
 
-        let push =
-            match dir with
-            | Left -> pushLeft
-            | Right -> pushRight
-
-        let pushedRock =
-            match rock with
-            | Falling r ->
-                let nextRock = r |> List.map push
-
-                match isAllInRoom nextRock with
-                | true -> Falling r
-                | false -> rock
-            | _ -> rock
-
-        pushedRock, room
-
-    Room doPushRock
-
-let fallOneUnit rock =
-    let doFallOneUnit room =
-        let fall = offsetCoord 0 -1
-
-        let isBlocked (x, y) =
-            if (y >= 0) then room.Blocked[x, y] else true
-
-        let isSomePartBlocked = List.map isBlocked >> List.reduce (||)
-
-        let fallingRock =
-            match rock with
-            | Falling r ->
-                let nextRock = r |> List.map fall
-
-                match isSomePartBlocked nextRock with
-                | true -> Resting r
-                | false -> Falling nextRock
-            | _ -> rock
-
-        fallingRock, room
-
-    Room doFallOneUnit
-
-let putRockToRest rock =
-    let doPutRockToRest room =
-        let h =
-            match rock with
-            | Resting r -> r |> List.map snd |> List.max |> max room.Height
-            | _ -> room.Height
-
-        match rock with
-        | Resting r -> r |> List.iter (fun (x, y) -> room.Blocked[x, y] <- true)
-        | _ -> ()
-
-        (), { room with Height = h }
-
-    Room doPutRockToRest
-
-let rocks: RockShape[] =
-    [| Shape [ (0, 0); (1, 0); (2, 0); (3, 0) ]
-       Shape [ (1, 0); (0, 1); (1, 1); (2, 1); (1, 2) ]
-       Shape [ (0, 0); (1, 0); (2, 0); (2, 1); (2, 2) ]
-       Shape [ (0, 0); (0, 1); (0, 2); (0, 3) ]
-       Shape [ (0, 0); (1, 0); (0, 1); (1, 1) ] |]
-
-let jetPattern =
-    ">>><<><>><<<>><>>><<<>>><<<><<<>><>><<>>"
-    |> Seq.map (fun ch ->
+module JetDirection =
+    let ofChar ch =
         match ch with
-        | '>' -> Right
         | '<' -> Left
-        | _ -> failwith $"Unexpected character ('%c{ch}') is stream definition")
-    |> Seq.toArray
+        | '>' -> Right
+        | ch -> failwith $"Unexpected direction character '%c{ch}'"
 
-let startRoom =
-    { Blocked = Array2D.create 7 10_000 false
+
+let printRoom room =
+    for y in room.Height .. - 1 .. 0 do
+        printf "|"
+
+        for x in 0..6 do
+            match Set.contains (x, y) room.Blocked with
+            | true -> printf "#"
+            | false -> printf "."
+
+        printfn "|"
+
+    printfn "+-------+"
+
+let data = System.IO.File.ReadLines "./day17/input.txt" |> Array.ofSeq
+
+let initialRoom =
+    { JetSource = data[0] |> Seq.map JetDirection.ofChar |> CircularBuffer.create
+      RockSource =
+        [ Rock [ (0, 0); (1, 0); (2, 0); (3, 0) ]
+          Rock [ (1, 0); (0, 1); (1, 1); (2, 1); (1, 2) ]
+          Rock [ (0, 0); (1, 0); (2, 0); (2, 1); (2, 2) ]
+          Rock [ (0, 0); (0, 1); (0, 2); (0, 3) ]
+          Rock [ (0, 0); (1, 0); (0, 1); (1, 1) ] ]
+        |> CircularBuffer.create
       Height = 0
-      RockClock = 0
-      RockGenerator = fun i -> rocks[i % rocks.Length]
-      JetClock = 0
-      JetGenerator = fun i -> jetPattern[i % jetPattern.Length] }
+      Blocked = Set.empty
+      ActiveRock = None }
 
-let next =
-    room {
-        let! r = getRock
-        let! live = makeLiveRock r
-        return live
-    }
+let folder s _ = Room.nextRock s
 
-let bar r =
-    room {
-        let! rock = fallOneUnit r
-        return rock
-    }
-
-let yada r =
-    fallOneUnit
-
-
-
-startRoom |> Seq.unfold yada
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-//
-// let rockGenerator = Seq.initInfinite (fun i -> rocks[i % rocks.Length])
-//
-// let jetStream =
-//     Seq.initInfinite (fun i ->
-//         match jetPattern[i % jetPattern.Length] with
-//         | '<' -> Left
-//         | '>' -> Right
-//         | ch -> failwith $"Unexpected character ('%c{ch}') in jet pattern")
-//
-// let pushRock (dx: int) (rock: Rock) : Rock =
-//     rock |> List.map (fun (x, y) -> (x + dx, y))
-//
-// let pushLeft = pushRock -1
-// let pushRight = pushRock 1
-//
-// let isBlocked (blocked: bool[,]) (rock: Rock) : bool =
-//     let isPosBlocked (blocked: bool[,]) (pos: Coordinate) : bool =
-//         match pos with
-//         | _, y when y < 0 -> true
-//         | x, _ when x < 0 || x >= 7 -> true
-//         | x, y when blocked[x, y] -> true
-//         | _ -> false
-//
-//     rock |> List.map (isPosBlocked blocked) |> List.reduce (||)
-//
-//
-// let push (blocked: bool[,]) (dir: JetDirection) (rock: Rock) : Rock =
-//     let movedRock =
-//         match dir with
-//         | Left -> pushLeft rock
-//         | Right -> pushRight rock
-//
-//     match isBlocked blocked movedRock with
-//     | true -> rock
-//     | false -> movedRock
-//
-// let fall (blocked: bool[,]) (rock: Rock) : Rock option =
-//     let movedRock = rock |> List.map (fun (x, y) -> (x, y - 1))
-//
-//     match isBlocked blocked movedRock with
-//     | true -> None
-//     | false -> Some movedRock
-//
-// let pop source = (Seq.head source, Seq.skip 1 source)
-//
-// let initRock (h: int) (rock: Rock) : Rock =
-//     rock |> List.map (fun (x, y) -> (x + 2, y + h + 3))
-//
-// let step (blocked: bool[,]) (state: JetDirection seq * Rock) : (Rock * (JetDirection seq * Rock)) option =
-//     let dir, pattern = pop (fst state)
-//
-//     let pushedRock = push blocked dir (snd state)
-//
-//     match fall blocked pushedRock with
-//     | Some r -> Some(r, (pattern, r))
-//     | None -> None
-//
-//
-// let step2 (blocked: bool[,]) (jetStream: JetDirection seq) (rock: Rock) =
-//     let mutable movingRock = rock
-//     let mutable isFalling = true
-//     let mutable pattern = jetStream
-//
-//     while isFalling do
-//         let dir = pattern |> Seq.head
-//         pattern <- pattern |> Seq.skip 1
-//         movingRock <- push blocked dir movingRock
-//
-//         match fall blocked movingRock with
-//         | Some r -> movingRock <- r
-//         | None -> isFalling <- false
-//
-//     movingRock, pattern
-//
-//
-// let simulateRock (state: State) (rock: Rock) : State =
-//     let restingRock, pattern =
-//         rock |> initRock state.Height |> step2 state.Blocked state.JetPattern
-//
-//     printf "."
-//     restingRock |> List.iter (fun (x, y) -> state.Blocked[x, y] <- true)
-//
-//     { Blocked = state.Blocked
-//       Height = restingRock |> List.map snd |> List.max |> (+) 1 |> max state.Height
-//       JetPattern = pattern }
-//
-//
-//
-//
-//
-//
-// let printBlocked (height: int) (blocked: bool[,]) =
-//     for y in height .. -1 .. 0 do
-//         printf "|"
-//
-//         for x in 0..6 do
-//             let ch =
-//                 match blocked[x, y] with
-//                 | true -> '#'
-//                 | false -> '.'
-//
-//             printf $"%c{ch}"
-//
-//         printfn "|"
-//
-//     printfn "+-------+"
-//
-//
-// let startState =
-//     { Blocked = Array2D.create 7 10000 false
-//       Height = 0
-//       JetPattern = jetStream }
-//
-// rockGenerator |> Seq.take 2022 |> // Seq.fold simulateRock startState
-//
-// //s.Blocked |> printBlocked s.Height
-// // printfn $"Height: %d{s.Height}"
+[ 1..2022 ]
+|> List.fold folder initialRoom
+|> (fun r -> r.Height)
+|> printfn "%d"
